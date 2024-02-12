@@ -101,6 +101,7 @@ class User:
 def load_credentials() -> list[User]:
     with open("credentials.json") as json_file:
         parsed = json.loads(json_file.read())
+        write_log("Loaded credentials")
         return [
             User(item["employee_number"], item["password"])
             for item in parsed["credentials"]
@@ -108,6 +109,7 @@ def load_credentials() -> list[User]:
 
 
 def main():
+    write_log(f'Started on {datetime.now()}')
     users: list[User] = load_credentials()
     while True:
         for user in users:
