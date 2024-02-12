@@ -14,7 +14,7 @@ TIME_WINDOW_END = config("TIME_WINDOW_END")
 
 def write_log(data: str):
     with open("./.log", "a") as logfile:
-        logfile.write(f'{data}\n')
+        logfile.write(f'{datetime.now()}\t\t{data}\n')
 
 
 class User:
@@ -27,6 +27,7 @@ class User:
         self.employee_number: str = employee_number
         self.password: str = password
         self._schedule_out = None
+        self.assign_schedule()
 
 
     def __str__(self) -> str:
@@ -38,10 +39,6 @@ class User:
         if self._schedule_out is None:
             return False
         return self._schedule_out < datetime.now()
-    
-
-    def start(self):
-        self.login().assign_schedule().clock_out()
 
 
     def assign_schedule(self) -> Self:
@@ -70,6 +67,8 @@ class User:
         )
 
         if response.status_code != 200:
+            write_log(f'{self.employee_number} failed to login')
+            write_log(response.text)
             return self
 
         parsed = json.loads(response.text)
@@ -80,7 +79,7 @@ class User:
 
     def clock_out(self) -> Self:
         if self._auth_token is None:
-            return self
+            self.login()
 
         if not self.should_out:
             return self
@@ -90,11 +89,11 @@ class User:
             headers={"Authorization": f"Bearer {self._auth_token}"},
         )
         if response.status_code != 200:
+            self.login()
             return self
         self._last_out = datetime.now()
-
-        self.assign_schedule()
         write_log(f"{self.employee_number} Last out: {self._last_out}")
+        self.assign_schedule()
         return self
 
 
@@ -113,7 +112,7 @@ def main():
     users: list[User] = load_credentials()
     while True:
         for user in users:
-            user.start()
+            user.clock_out()
         time.sleep(60)
 
 
