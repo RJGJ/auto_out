@@ -18,9 +18,9 @@ def write_log(data: str):
 
 
 class User:
-    _last_out: Optional[datetime]
-    _auth_token: Optional[str]
-    _schedule_out: Optional[datetime]
+    _last_out: Optional[datetime] = None
+    _auth_token: Optional[str] = None
+    _schedule_out: Optional[datetime] = None
 
 
     def __init__(self, employee_number: str, password: str):
@@ -90,7 +90,7 @@ class User:
         )
         if response.status_code != 200:
             self.login()
-            return self
+
         self._last_out = datetime.now()
         write_log(f"{self.employee_number} Last out: {self._last_out}")
         self.assign_schedule()
