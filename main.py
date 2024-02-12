@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from typing_extensions import Self
 from decouple import config
 from datetime import datetime
@@ -98,7 +98,7 @@ class User:
         return self
 
 
-def load_credentials() -> list[User]:
+def load_credentials() -> List[User]:
     with open("credentials.json") as json_file:
         parsed = json.loads(json_file.read())
         write_log("Loaded credentials")
