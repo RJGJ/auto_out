@@ -1,120 +1,102 @@
-from typing import Optional, List
-from typing_extensions import Self
-from decouple import config
-from datetime import datetime
 import requests
 import json
+import datetime as dt
 import time
-import random
+import logging
+
+from decouple import config
+from scheduler import Scheduler
 
 API_URL = config("API_URL")
-TIME_WINDOW_START = config("TIME_WINDOW_START")
-TIME_WINDOW_END = config("TIME_WINDOW_END")
-
-
-def write_log(data: str):
-    with open("./.log", "a") as logfile:
-        logfile.write(f'{datetime.now()}\t\t{data}\n')
-
-
-class User:
-    _last_out: Optional[datetime] = None
-    _auth_token: Optional[str] = None
-    _schedule_out: Optional[datetime] = None
-
-
-    def __init__(self, employee_number: str, password: str):
-        self.employee_number: str = employee_number
-        self.password: str = password
-        self._schedule_out = None
-        self.assign_schedule()
-
-
-    def __str__(self) -> str:
-        return f"{self.employee_number}, Schedule: {self._schedule_out}"
-
-
-    @property
-    def should_out(self) -> bool:
-        if self._schedule_out is None:
-            return False
-        return self._schedule_out < datetime.now()
-
-
-    def assign_schedule(self) -> Self:
-        now = datetime.now()
-        window_start = datetime.strptime(TIME_WINDOW_START, "%H:%M").timestamp()
-        window_end = datetime.strptime(TIME_WINDOW_END, "%H:%M").timestamp()
-        schedule = datetime.fromtimestamp(
-            random.uniform(window_start, window_end)
-        ).replace(
-            year=now.year,
-            month=now.month,
-            day=now.day,
-        )
-        self._schedule_out: datetime = schedule
-        write_log(f'{self.employee_number} assigned at: {self._schedule_out}')
-        return self
-
-
-    def login(self) -> Self:
-        response = requests.post(
-            f"{API_URL}/api/v1/auth/hris/login",
-            json={
-                "employee_number": self.employee_number,
-                "password": self.password,
-            },
-        )
-
-        if response.status_code != 200:
-            write_log(f'{self.employee_number} failed to login')
-            write_log(response.text)
-            return self
-
-        parsed = json.loads(response.text)
-        self._auth_token = parsed["data"]["token"]
-        write_log(f'{self.employee_number} logged in')
-        return self
-
-
-    def clock_out(self) -> Self:
-        if self._auth_token is None:
-            self.login()
-
-        if not self.should_out:
-            return self
-
-        response = requests.post(
-            f"{API_URL}/api/v1/hris/attendance/submit",
-            headers={"Authorization": f"Bearer {self._auth_token}"},
-        )
-        if response.status_code != 200:
-            self.login()
-
-        self._last_out = datetime.now()
-        write_log(f"{self.employee_number} Last out: {self._last_out}")
-        self.assign_schedule()
-        return self
-
-
-def load_credentials() -> List[User]:
-    with open("credentials.json") as json_file:
-        parsed = json.loads(json_file.read())
-        write_log("Loaded credentials")
-        return [
-            User(item["employee_number"], item["password"])
-            for item in parsed["credentials"]
-        ]
 
 
 def main():
-    write_log(f'Started on {datetime.now()}')
-    users: list[User] = load_credentials()
-    while True:
-        for user in users:
-            user.clock_out()
-        time.sleep(60)
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(
+        filename='./app.log',
+        encoding="utf-8",
+        filemode="a",
+        format="{asctime} - {levelname} - {message}",
+        style="{",
+        datefmt="%Y-%m-%d %H:%M",
+    )
+    logger.setLevel(logging.INFO)
+
+    # obtain users from json file
+    users= []
+    try:
+        with open('credentials.json') as json_file:
+            json_file = json.load(json_file)
+            credentials = json_file['credentials']
+            users = credentials
+    except Exception as e:
+        logger.error(f"Failed to open credentials file: {e}")
+
+    for user in users:
+        # login
+        response = None
+        try:
+            response = requests.post(f'{API_URL}auth/hris/login', json={
+                'employee_number': user['employee_number'],
+                'password': user['password']
+            })
+        except Exception as e:
+            logger.error(f"Failed to login user {user['employee_number']}: {e}")
+            continue
+
+        if response.status_code != 200:
+            logger.error(f"Failed to login user {user['employee_number']}: {response.json()}")
+            continue
+        
+        user_token = response.json()['data']['token']
+
+        # check if timed in
+        dashboard_response = None
+        try:
+            dashboard_response = requests.post(f'{API_URL}hris/dashboard', headers={
+                'Authorization': f'Bearer {user_token}'
+            })  
+        except Exception as e:
+            logger.error(f"Failed to get dashboard for user {user['employee_number']}: {e}")
+            continue
+
+        if dashboard_response.status_code != 200:
+            logger.error(f"Failed to get dashboard for user {user['employee_number']}: {dashboard_response.json()}")
+            continue
+        
+
+        time_in = dashboard_response.json()['data']['attendance']['time_in']
+        time_out = dashboard_response.json()['data']['attendance']['time_out']
+
+        if time_in == None:
+            continue
+        # perform time out
+        time_out_response = None
+        try:
+            time_out_response = requests.post(f'{API_URL}hris/attendance/submit', headers={
+                'Authorization': f'Bearer {user_token}'
+            })  
+        except Exception as e:
+            logger.error(f"Failed to time out user {user['employee_number']}: {e}")
+            continue
+
+        if time_out_response.status_code != 200:
+            logger.error(f"Failed to time out user {user['employee_number']}: {time_out_response.json()}")
+            continue
+        
+        logger.info(f"Successfully timed out user {user['employee_number']}")
 
 
 if __name__ == "__main__":
-    main()
+    scheduler = Scheduler()
+    scheduler.daily(dt.time(hour=5, minute=1, second=1), main)
+    # scheduler.cyclic(dt.timedelta(seconds=5), main)
+
+    while True:
+        try:
+            scheduler.exec_jobs()
+        except Exception as e:
+            print(f"Failed to execute jobs: {e}")
+            logging.error(f"Failed to execute jobs: {e}")
+        time.sleep(1)
+
