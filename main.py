@@ -10,17 +10,7 @@ from scheduler import Scheduler
 API_URL = config("API_URL")
 
 
-def main():
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(
-        filename='./app.log',
-        encoding="utf-8",
-        filemode="a",
-        format="{asctime} - {levelname} - {message}",
-        style="{",
-        datefmt="%Y-%m-%d %H:%M",
-    )
-    logger.setLevel(logging.INFO)
+def main(logger):
 
     # obtain users from json file
     users= []
@@ -88,9 +78,20 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        filename='./app.log',
+        encoding="utf-8",
+        filemode="a",
+        format="{asctime} - {levelname} - {message}",
+        style="{",
+        datefmt="%Y-%m-%d %H:%M",
+    )
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    logger.info(f"Starting Auto out at {dt.datetime.now()}")
+
     scheduler = Scheduler()
-    scheduler.daily(dt.time(hour=5, minute=1, second=1), main)
-    # scheduler.cyclic(dt.timedelta(seconds=5), main)
+    scheduler.daily(dt.time(hour=20, minute=39, second=1), main, args=[logger])
 
     while True:
         try:
@@ -98,5 +99,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to execute jobs: {e}")
             logging.error(f"Failed to execute jobs: {e}")
-        time.sleep(1)
+        
+        logger.info('tick')
 
+        time.sleep(10)
