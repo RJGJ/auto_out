@@ -91,7 +91,7 @@ if __name__ == "__main__":
     logger.info(f"Starting Auto out at {dt.datetime.now()}")
 
     scheduler = Scheduler()
-    scheduler.daily(dt.time(hour=20, minute=39, second=1), main, args=[logger])
+    scheduler.daily(dt.time(hour=17, minute=1, second=1), main, args=[logger])
 
     while True:
         try:
@@ -99,7 +99,5 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Failed to execute jobs: {e}")
             logging.error(f"Failed to execute jobs: {e}")
-        
-        logger.info('tick')
 
         time.sleep(10)
