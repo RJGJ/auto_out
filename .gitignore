@@ -3,3 +3,5 @@ credentials.json
 nohup.out
 **.log
 credentials.json
+*.code-workspace
+
